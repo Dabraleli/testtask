@@ -10,24 +10,31 @@
 #include <sstream>
 #include <string>
 #include <map>
+#include <thread>
+#include <zconf.h>
+
 
 using namespace seasocks;
 
 class EchoHandler : public WebSocket::Handler {
 public:
-    virtual void onConnect(WebSocket * connection){
-
-    }
-    virtual void onData(WebSocket* connection, const uint8_t* data, size_t length) override {
-        connection->send(data, length);
+    void onConnect(WebSocket * connection) override {
+        m_connection = connection;
     }
 
-    virtual void onData(WebSocket* connection, const char* data) override {
-        connection->send(data);
+    void onDisconnect(WebSocket* connection) override {
+
     }
 
-    virtual void onDisconnect(WebSocket* connection) override {
+    void tick() {
+        if(m_connection != nullptr)
+            m_connection->server().execute([&](){
+            m_connection->send(R"({"Type": 1, "Data": "ping"})");
+        });
     }
+
+private:
+    WebSocket * m_connection;
 };
 
 int main(int argc, const char* argv[]) {
@@ -36,6 +43,10 @@ int main(int argc, const char* argv[]) {
     Server server(logger);
     auto handler = std::make_shared<EchoHandler>();
     server.addWebSocketHandler("/", handler);
+    std::thread tick([&]{
+        for (;;) { sleep(3); handler->tick(); }
+    });
+    tick.detach();
     server.serve("", 8000);
     return 0;
 }
