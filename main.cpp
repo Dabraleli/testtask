@@ -20,21 +20,29 @@ class EchoHandler : public WebSocket::Handler {
 public:
     void onConnect(WebSocket * connection) override {
         m_connection = connection;
+        m_isClosed = false;
     }
 
     void onDisconnect(WebSocket* connection) override {
-
+        m_isClosed = true;
     }
 
-    void tick() {
+    void tick(Server& server) {
         if(m_connection != nullptr)
-            m_connection->server().execute([&](){
-            m_connection->send(R"({"Type": 1, "Data": "ping"})");
-        });
+            try {
+            server.execute([&](){
+                if(!m_isClosed)
+                    m_connection->send(R"({"Type": 1, "Data": "ping"})");
+
+            });
+            } catch (std::exception &e){
+                std::cout << e.what() << std::endl;
+            }
     }
 
 private:
     WebSocket * m_connection;
+    bool m_isClosed;
 };
 
 int main(int argc, const char* argv[]) {
@@ -44,7 +52,7 @@ int main(int argc, const char* argv[]) {
     auto handler = std::make_shared<EchoHandler>();
     server.addWebSocketHandler("/", handler);
     std::thread tick([&]{
-        for (;;) { sleep(3); handler->tick(); }
+        for (;;) { sleep(3); handler->tick(server); }
     });
     tick.detach();
     server.serve("", 8000);
